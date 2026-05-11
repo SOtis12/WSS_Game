@@ -190,13 +190,85 @@ class ExpeditionConsole(tk.Tk):
     def interact_with_trader(self) -> None:
         if self.game is None or self.snapshot is None:
             return
-        assert self.game is not None
-        result = self.game.interact_trader()
-        self.snapshot = result.snapshot
-        self._set_status(result.messages)
-        if any("trade complete" in message for message in result.messages):
-            self._spawn_audio("trade")
-        self.refresh()
+        if not self.game._nearby_trader():
+            self.status_state = "blank"
+            self.status_text = "No trader nearby."
+            self.refresh()
+            return
+        self._open_trade_dialog()
+
+    def _open_trade_dialog(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Trade Negotiation")
+        dialog.configure(bg=PANEL)
+        dialog.resizable(False, False)
+        dialog.grab_set()
+        dialog.transient(self)
+        w, h = 420, 380
+        x = self.winfo_x() + (self.winfo_width() - w) // 2
+        y = self.winfo_y() + (self.winfo_height() - h) // 2
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+
+        res = self.snapshot.resources
+
+        tk.Label(dialog, text="Make a Trade Offer", bg=PANEL, fg=TEXT,
+                 font=(FONT, 16, "bold")).pack(pady=(18, 2))
+        tk.Label(dialog, text=f"Your resources: {res.describe()}", bg=PANEL, fg=MUTED,
+                 font=(FONT, 10)).pack()
+        tk.Label(dialog, text="-" * 52, bg=PANEL, fg=LINE).pack(pady=(6, 0))
+
+        give_frame = tk.Frame(dialog, bg=PANEL)
+        give_frame.pack(pady=(10, 0))
+        tk.Label(give_frame, text="YOU GIVE", bg=PANEL, fg=MUTED, font=(FONT, 10, "bold")).grid(row=0, columnspan=6, pady=(0, 4))
+
+        take_frame = tk.Frame(dialog, bg=PANEL)
+        take_frame.pack(pady=(10, 0))
+        tk.Label(take_frame, text="YOU RECEIVE", bg=PANEL, fg=MUTED, font=(FONT, 10, "bold")).grid(row=0, columnspan=6, pady=(0, 4))
+
+        give_vars, take_vars = {}, {}
+        for col, name in enumerate(("gold", "water", "food")):
+            for frame, var_dict in ((give_frame, give_vars), (take_frame, take_vars)):
+                tk.Label(frame, text=name.title(), bg=PANEL, fg=TEXT, font=(FONT, 9)).grid(row=1, column=col * 2, padx=(10, 2))
+                var = tk.IntVar(value=0)
+                var_dict[name] = var
+                tk.Spinbox(frame, from_=0, to=20, textvariable=var, width=4,
+                           bg=TEXT, fg=BG, font=(FONT, 10), buttonbackground=GOLD).grid(row=1, column=col * 2 + 1, padx=(0, 6))
+
+        feedback = tk.Label(dialog, text="", bg=PANEL, fg=GOLD, font=(FONT, 10), wraplength=360)
+        feedback.pack(pady=(12, 0))
+
+        def submit():
+            from wss import Resources, TradeOffer
+            give = Resources(gold=give_vars["gold"].get(), water=give_vars["water"].get(), food=give_vars["food"].get())
+            take = Resources(gold=take_vars["gold"].get(), water=take_vars["water"].get(), food=take_vars["food"].get())
+            if give == Resources() and take == Resources():
+                feedback.configure(text="Enter something to offer or request.", fg=GOLD)
+                return
+            offer = TradeOffer(give=give, take=take)
+            result = self.game.interact_trader(offer=offer)
+            self.snapshot = result.snapshot
+            self._set_status(result.messages)
+            joined = "\n".join(result.messages).lower()
+            if "trade complete" in joined:
+                feedback.configure(text="Trade accepted!", fg="#7EE87E")
+                self._spawn_audio("trade")
+                self.refresh()
+                dialog.after(900, dialog.destroy)
+            elif "angry quit" in joined:
+                feedback.configure(text="Trader stormed off!", fg="#E87E7E")
+                self.refresh()
+                dialog.after(900, dialog.destroy)
+            elif "counter" in joined:
+                feedback.configure(text="Trader countered - check log and try again.", fg=GOLD)
+                self.refresh()
+            else:
+                feedback.configure(text="Offer rejected. Try a better deal.", fg="#E87E7E")
+                self.refresh()
+
+        btn_row = tk.Frame(dialog, bg=PANEL)
+        btn_row.pack(pady=(16, 0))
+        self._button(btn_row, "Make Offer", submit).pack(side="left", padx=8)
+        self._button(btn_row, "Cancel", dialog.destroy).pack(side="left", padx=8)
 
     def _after_turn(self, before: Position, result) -> None:
         self.snapshot = result.snapshot

@@ -235,15 +235,15 @@ class DifficultyStrategy:
 
 
 class EasyDifficulty(DifficultyStrategy):
-    name, weights, start = "easy", ((Plains, 44), (Forest, 26), (Mountain, 15), (Swamp, 8), (Desert, 7)), Resources(strength=125, water=125, food=125)
+    name, weights, start = "easy", ((Plains, 50), (Forest, 28), (Mountain, 10), (Swamp, 6), (Desert, 6)), Resources(strength=140, water=140, food=140)
 
 
 class NormalDifficulty(DifficultyStrategy):
-    name, weights, start = "normal", ((Plains, 26), (Forest, 18), (Mountain, 22), (Swamp, 17), (Desert, 17)), Resources(strength=105, water=105, food=105)
+    name, weights, start = "normal", ((Plains, 26), (Forest, 18), (Mountain, 22), (Swamp, 17), (Desert, 17)), Resources(strength=100, water=100, food=100)
 
 
 class HardDifficulty(DifficultyStrategy):
-    name, weights, start = "hard", ((Plains, 12), (Forest, 12), (Mountain, 22), (Swamp, 27), (Desert, 27)), Resources(strength=92, water=92, food=92)
+    name, weights, start = "hard", ((Plains, 8), (Forest, 10), (Mountain, 24), (Swamp, 30), (Desert, 28)), Resources(strength=72, water=72, food=72)
 
 
 DIFFICULTIES = dict(easy=EasyDifficulty, normal=NormalDifficulty, hard=HardDifficulty)
@@ -327,14 +327,15 @@ class WSSGame:
         self._finish_if_needed()
         return TurnResult(self.snapshot(), tuple(self.log[before:]))
 
-    def interact_trader(self) -> TurnResult:
+    def interact_trader(self, offer: "TradeOffer | None" = None) -> TurnResult:
         if not self.started:
             self.start()
         if self.finished:
             return TurnResult(self.snapshot(), ())
         before = len(self.log)
         trader = self._nearby_trader()
-        offer = self._manual_offer()
+        if offer is None:
+            offer = self._manual_offer()
         if trader and offer:
             trader.interact(self.player, self, offer)
         else:
